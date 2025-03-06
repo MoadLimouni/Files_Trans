@@ -2,18 +2,17 @@ import socket
 import os
 from Crypto.Cipher import AES
 
-# key and nonce for decrypting 
-key = b"TheNeuralninekey"
-nonce =b"TheNeuralnineNCE"
+# Key and nonce for decryption
+key = b"L!M&oun!M0@d8745"  
+nonce = b"M0@d8745L!M&oun!" 
 
-# Define the folder where received files should be saved
-folder_location = "./reciev/"  
+cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
 
-# Create the folder if it doesn't exist
+# Define folder where received files should be saved
+folder_location = "./reciev/"
 os.makedirs(folder_location, exist_ok=True)
 
-cipher = AES.new(key,AES.MODE_EAX,nonce)
-
+# Set up server
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(("localhost", 9000))
 server.listen()
@@ -22,13 +21,15 @@ print("Server is listening on port 9000...")
 client, addr = server.accept()
 print(f"Connection established with {addr}")
 
-# Receive file name
-file_name = client.recv(1024).decode().strip()
+# Receive and decrypt file name
+encrypted_file_name = client.recv(1024)
+file_name = cipher.decrypt(encrypted_file_name).decode().strip()
 print(f"Receiving file: {file_name}")
 
-# Receive file size
+# Receive and decrypt file size
 try:
-    file_size = int(client.recv(1024).decode().strip())
+    encrypted_file_size = client.recv(1024)
+    file_size = int(cipher.decrypt(encrypted_file_size).decode().strip())
     print(f"File size: {file_size} bytes")
 except ValueError:
     print("Error: Could not parse file size.")
@@ -36,18 +37,24 @@ except ValueError:
     server.close()
     exit()
 
-# Save the file in the receiver's repository
+# Save file to the correct directory
 file_path = os.path.join(folder_location, file_name)
 
-# Receive file data and write to the correct directory
+# Receive and decrypt file data
+received_size = 0
 with open(file_path, "wb") as file:
-    received_size = 0
     while received_size < file_size:
         data = client.recv(1024)
         if not data:
             break
-        file.write(data)
-        received_size += len(data)
+        decrypted_data = cipher.decrypt(data)
+        
+        # Stop if the "<END>" message is received
+        if decrypted_data == b"<END>":
+            break
+        
+        file.write(decrypted_data)
+        received_size += len(decrypted_data)
 
 print(f"File received and saved as {file_path}")
 
