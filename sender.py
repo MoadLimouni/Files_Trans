@@ -3,40 +3,42 @@ import socket
 import time  
 from Crypto.Cipher import AES
 
-
+# Create and connect client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect(("localhost", 9000))
 
-# key and nonce for encrypting
-key = b"TheNeuralninekey"
-nonce =b"TheNeuralnineNCE"
-cipher = AES.new(key,AES.MODE_EAX,nonce)
+# Key and nonce for encryption
+key = b"L!M&oun!M0@d8745"  
+nonce = b"M0@d8745L!M&oun!"  
+cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
 
+# Define file details
 file_path = "filetosend.txt"
-file_size= os.path.getsize(file_path)
-encrypted_file_size = cipher.encrypt(file_size)
-enb=encrypted_file_size.to_bytes(8, 'big') # atttttention here
+file_size = os.path.getsize(file_path)
+file_name = "recieved_file.txt"
 
-# Send file name
+# Encrypt file name and send it
+encrypted_file_name = cipher.encrypt(file_name.encode())
+client.send(encrypted_file_name)
+time.sleep(0.1)
 
-file_name="recieved_file.txt" 
-encrypted_file_name=cipher.encrypt(file_name)
-client.send(encrypted_file_name.encode())
-time.sleep(0.1)  # Short delay to avoid mixed messages
+# Encrypt file size and send it
+encrypted_file_size = cipher.encrypt(str(file_size).encode())
+client.send(encrypted_file_size)
+time.sleep(0.1)
 
-# Send file size
-client.send(str(encrypted_file_size).encode())
-
-time.sleep(0.1)  
-
-# Send file content
+# Encrypt and send file content
 with open(file_path, "rb") as file:
-    data = file.read(1024)
-    while data:
-        encrypted_data=cipher.encrypt(data)
-        client.send(encrypted_data.tobyte)
+    while True:
         data = file.read(1024)
+        if not data:
+            break
+        encrypted_data = cipher.encrypt(data)
+        client.send(encrypted_data)
 
-client.send(b"<END>")  
-print(data)
+# Send encrypted end signal
+encrypted_end = cipher.encrypt(b"<END>")
+client.send(encrypted_end)
+
+print("File sent successfully.")
 client.close()
