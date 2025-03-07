@@ -2,11 +2,18 @@ import socket
 import os
 from Crypto.Cipher import AES
 
-# Key and nonce for decryption
-key = b"L!M&oun!M0@d8745"  
-nonce = b"M0@d8745L!M&oun!" 
+# Define file details
+key_file_path = "./key.txt"
+nonce_file_path = "./nonce.txt"
 
-cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+# Read the key and nonce files 
+with open(key_file_path, "rb") as f:
+    key = f.read()
+with open(nonce_file_path, "rb") as f:
+    nonce = f.read()
+
+
+cipher = AES.new(key, AES.MODE_EAX, nonce=nonce) 
 
 # Define folder where received files should be saved
 folder_location = "./reciev/"
