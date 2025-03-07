@@ -7,9 +7,10 @@ from tqdm import tqdm
 
 # Create and connect client socket
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(("localhost", 9000))
 host = "localhost"
 port = 9000
+client.connect((host, port))
+
 
 # Define file details
 key_file_path = "./key.txt"
