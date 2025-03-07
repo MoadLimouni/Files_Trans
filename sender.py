@@ -5,63 +5,102 @@ import hashlib
 from Crypto.Cipher import AES
 from tqdm import tqdm  
 
-# Create and connect client socket
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-host = "localhost"
-port = 9000
-client.connect((host, port))
 
+HOST = "localhost"
+PORT = 9000
+BUFFER_SIZE = 1024  
+KEY_FILE_PATH = "./key.txt"
+NONCE_FILE_PATH = "./nonce.txt"
+FILE_PATH = "Rapport_1_FOTA 2.pdf"
 
-# Define file details
-key_file_path = "./key.txt"
-nonce_file_path = "./nonce.txt"
+def read_file_safely(file_path):
+    """Read and return file contents safely, handling errors."""
+    try:
+        with open(file_path, "rb") as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"❌ Error: The file '{file_path}' was not found.")
+        exit(1)
+    except PermissionError:
+        print(f"❌ Error: Permission denied when accessing '{file_path}'.")
+        exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error reading '{file_path}': {e}")
+        exit(1)
 
-# Read the key and nonce files
-with open(key_file_path, "rb") as f:
-    key = f.read()
-with open(nonce_file_path, "rb") as f:
-    nonce = f.read()
+try:
+    # Read encryption key and nonce
+    key = read_file_safely(KEY_FILE_PATH)
+    nonce = read_file_safely(NONCE_FILE_PATH)
 
-# Create a cipher using the key and nonce
-cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+    # Validate key length for AES
+    if len(key) not in (16, 24, 32):
+        raise ValueError("Invalid AES key length. Key must be 16, 24, or 32 bytes.")
 
-# Define file details
-file_path = "Rapport_1_FOTA 2.pdf"
-file_size = os.path.getsize(file_path)
-file_name_to_send = os.path.basename(file_path)
+    # Create AES cipher
+    cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
 
-# Compute file hash
-with open(file_path, "rb") as f:
-    original_hash = hashlib.sha256(f.read()).hexdigest()
+    # Verify file existence
+    if not os.path.exists(FILE_PATH):
+        raise FileNotFoundError(f"The file '{FILE_PATH}' does not exist.")
 
-# Encrypt and send the file hash
-encrypted_hash = cipher.encrypt(original_hash.encode())
-client.send(encrypted_hash)
-time.sleep(0.1)
+    # Get file details
+    file_size = os.path.getsize(FILE_PATH)
+    file_name_to_send = os.path.basename(FILE_PATH)
 
-# Encrypt file name and send it
-encrypted_file_name = cipher.encrypt(file_name_to_send.encode())
-client.send(encrypted_file_name)
-time.sleep(0.1)
+    # Compute file hash
+    with open(FILE_PATH, "rb") as f:
+        original_hash = hashlib.sha256(f.read()).hexdigest()
 
-# Encrypt file size and send it
-encrypted_file_size = cipher.encrypt(str(file_size).encode())
-client.send(encrypted_file_size)
-time.sleep(0.1)
+    # Create and connect to the server
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client.settimeout(10)  # Set a timeout for connection attempts
+    try:
+        client.connect((HOST, PORT))
+    except socket.timeout:
+        print("❌ Connection timed out. Is the server running?")
+        exit(1)
+    except ConnectionRefusedError:
+        print("❌ Connection refused. Ensure the server is online and the port is correct.")
+        exit(1)
 
-# Encrypt and send file content with a progress bar
-with open(file_path, "rb") as file, tqdm(total=file_size, unit="B", unit_scale=True, desc="Sending") as pbar:
-    while True:
-        data = file.read(1024)
-        if not data:
-            break
-        encrypted_data = cipher.encrypt(data)
-        client.send(encrypted_data)
-        pbar.update(len(data))
+    # Encrypt and send the file hash
+    client.send(cipher.encrypt(original_hash.encode()))
+    time.sleep(0.1)
 
-# Send encrypted end signal
-encrypted_end = cipher.encrypt(b"<END>")
-client.send(encrypted_end)
+    # Encrypt and send the file name
+    client.send(cipher.encrypt(file_name_to_send.encode()))
+    time.sleep(0.1)
 
-print("\nFile sent successfully.")
-client.close()
+    # Encrypt and send the file size
+    client.send(cipher.encrypt(str(file_size).encode()))
+    time.sleep(0.1)
+
+    # Encrypt and send file content with progress bar
+    with open(FILE_PATH, "rb") as file, tqdm(total=file_size, unit="B", unit_scale=True, desc="Sending") as pbar:
+        while chunk := file.read(BUFFER_SIZE):  
+            client.send(cipher.encrypt(chunk))
+            pbar.update(len(chunk))
+
+    # Send encrypted end signal
+    client.send(cipher.encrypt(b"<END>"))
+
+    print("\n✅ File sent successfully.")
+
+except ValueError as ve:
+    print(f"❌ Value Error: {ve}")
+except FileNotFoundError as fnf:
+    print(f"❌ File Error: {fnf}")
+except PermissionError:
+    print("❌ Permission Error: Check your file access rights.")
+except socket.error as se:
+    print(f"❌ Socket Error: {se}")
+except Exception as e:
+    print(f"❌ Unexpected Error: {e}")
+finally:
+    try:
+        client.close()
+        print("🔌 Connection closed.")
+    except NameError:
+        pass  
+
