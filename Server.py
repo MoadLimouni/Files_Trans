@@ -113,7 +113,6 @@ except socket.error as se:
 except Exception as e:
     print(f"❌ Unexpected Error: {e}")
 finally:
-    # Ensure cleanup
     try:
         client.close()
         server.close()
